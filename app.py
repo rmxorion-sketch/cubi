@@ -12,7 +12,7 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 LIBS = [
     "knolleary/PubSubClient@^2.8",
     "bblanchon/ArduinoJson@^6.21.0",
-    "marcoschwartz/LiquidCrystal_I2C@^1.1.4",
+    "johnrickman/LiquidCrystal I2C@^1.1.2",
     "madhephaestus/ESP32Servo@^0.13.0"
 ]
 
@@ -126,6 +126,13 @@ def get_pio():
 def index():
     return jsonify({"status": "TURIN-G Compile Server", "version": "2.0"})
 
+@app.route("/cache/clear", methods=["POST"])
+def clear_cache():
+    import shutil
+    shutil.rmtree(CACHE_DIR, ignore_errors=True)
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    return jsonify({"ok": True, "msg": "Cache limpiado"})
+
 @app.route("/health", methods=["GET"])
 def health():
     pio = get_pio()
@@ -173,6 +180,7 @@ board    = {BOARD}
 framework = {FRAMEWORK}
 monitor_speed = 115200
 board_build.partitions = min_spiffs.csv
+build_flags = -DCORE_DEBUG_LEVEL=0 -w
 lib_deps =
     {lib_deps}
 """)
