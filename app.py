@@ -9,12 +9,24 @@ FRAMEWORK = "arduino"
 CACHE_DIR = "/tmp/turin_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-LIBS = [
+LIBS_BASE = [
     "knolleary/PubSubClient@^2.8",
     "bblanchon/ArduinoJson@^6.21.0",
-    "marcoschwartz/LiquidCrystal_I2C@^1.1.4",
     "madhephaestus/ESP32Servo@^0.13.0"
 ]
+
+LIBS_OPTIONAL = {
+    "LiquidCrystal": "marcoschwartz/LiquidCrystal_I2C@^1.1.4",
+    "lcd":           "marcoschwartz/LiquidCrystal_I2C@^1.1.4",
+    "LCD":           "marcoschwartz/LiquidCrystal_I2C@^1.1.4",
+}
+
+def get_libs(cpp_code: str) -> list:
+    libs = list(LIBS_BASE)
+    for keyword, lib in LIBS_OPTIONAL.items():
+        if keyword in cpp_code and lib not in libs:
+            libs.append(lib)
+    return libs
 
 def inject_ota(cpp_code: str) -> str:
     """Inyecta OTA como include separado para evitar conflictos de compilación."""
@@ -144,7 +156,7 @@ def compile_code():
     with open(os.path.join(src, "turin_ota.h"), "w") as f:
         f.write(TURIN_OTA_H)
 
-    lib_deps = "\n    ".join(LIBS)
+    lib_deps = "\n    ".join(get_libs(cpp_code))
     with open(os.path.join(proj, "platformio.ini"), "w") as f:
         f.write(f"""[env:{BOARD}]
 platform = {PLATFORM}
