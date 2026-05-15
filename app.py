@@ -12,109 +12,77 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 LIBS = [
     "knolleary/PubSubClient@^2.8",
     "bblanchon/ArduinoJson@^6.21.0",
-    "johnrickman/LiquidCrystal I2C@^1.1.2",
+    "marcoschwartz/LiquidCrystal_I2C@^1.1.4",
     "madhephaestus/ESP32Servo@^0.13.0"
 ]
 
-# ─── Bloque OTA que se inyecta en TODO firmware generado ──────────────────────
-OTA_HEADER = """
-#include <Arduino.h>
+def inject_ota(cpp_code: str) -> str:
+    """Inyecta OTA como include separado para evitar conflictos de compilación."""
+    if "_ota_setup" in cpp_code:
+        return cpp_code  # ya tiene OTA
+    cpp_code = cpp_code.replace("#include <Arduino.h>", "")
+    header = '#include <Arduino.h>\n#include "turin_ota.h"\n\n'
+    cpp_code = header + cpp_code
+    cpp_code = cpp_code.replace("void setup() {",  "void setup() {\n    _ota_setup();\n")
+    cpp_code = cpp_code.replace("void setup(){",   "void setup(){\n    _ota_setup();\n")
+    cpp_code = cpp_code.replace("void loop() {",   "void loop() {\n    _ota_loop();\n")
+    cpp_code = cpp_code.replace("void loop(){",    "void loop(){\n    _ota_loop();\n")
+    return cpp_code
+
+TURIN_OTA_H = """\
+#pragma once
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Update.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>
 
-// ── Turin OTA Core ─────────────────────────────────────────────────────────
-WebServer _ota_server(8266);
-Preferences _ota_prefs;
+static WebServer _ota_server(8266);
+static Preferences _ota_prefs;
 
-void _ota_setup() {
+inline void _ota_setup() {
     _ota_prefs.begin("turin", false);
     String ssid = _ota_prefs.getString("ssid", "");
     String pass = _ota_prefs.getString("pass", "");
-
     if (ssid.length() > 0) {
         WiFi.begin(ssid.c_str(), pass.c_str());
-        int tries = 0;
-        while (WiFi.status() != WL_CONNECTED && tries < 20) {
-            delay(500); tries++;
-        }
+        int t = 0;
+        while (WiFi.status() != WL_CONNECTED && t < 20) { delay(500); t++; }
     }
+    if (WiFi.status() != WL_CONNECTED) WiFi.softAP("TURIN-G-Setup", "12345678");
 
-    if (WiFi.status() != WL_CONNECTED) {
-        // Sin WiFi configurado: levantar hotspot de configuracion
-        WiFi.softAP("TURIN-G-Setup", "12345678");
-    }
-
-    // Endpoint: recibir credenciales WiFi
+    _ota_server.on("/status", HTTP_GET, []() {
+        String ip = (WiFi.status()==WL_CONNECTED) ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
+        _ota_server.send(200, "application/json",
+            "{\\"device\\":\\"TURIN-G\\",\\"ip\\":\\"" + ip + "\\"}");
+    });
     _ota_server.on("/wifi", HTTP_POST, []() {
-        String body = _ota_server.arg("plain");
         StaticJsonDocument<256> doc;
-        if (!deserializeJson(doc, body)) {
+        if (!deserializeJson(doc, _ota_server.arg("plain"))) {
             _ota_prefs.putString("ssid", doc["ssid"].as<String>());
             _ota_prefs.putString("pass", doc["pass"].as<String>());
             _ota_server.send(200, "text/plain", "OK");
             delay(500); ESP.restart();
-        } else {
-            _ota_server.send(400, "text/plain", "Bad JSON");
-        }
+        } else { _ota_server.send(400, "text/plain", "Error"); }
     });
-
-    // Endpoint: recibir firmware OTA
-    _ota_server.on("/ota", HTTP_POST, []() {
-        bool ok = !Update.hasError();
-        _ota_server.send(200, "text/plain", ok ? "OK" : "FAIL");
-        if (ok) { delay(200); ESP.restart(); }
-    }, []() {
-        HTTPUpload& upload = _ota_server.upload();
-        if (upload.status == UPLOAD_FILE_START) {
-            Update.begin(UPDATE_SIZE_UNKNOWN);
-        } else if (upload.status == UPLOAD_FILE_WRITE) {
-            Update.write(upload.buf, upload.currentSize);
-        } else if (upload.status == UPLOAD_FILE_END) {
-            Update.end(true);
-        }
-    });
-
-    // Endpoint: status (para que la app Android detecte el dispositivo)
-    _ota_server.on("/status", HTTP_GET, []() {
-        String ip  = (WiFi.status() == WL_CONNECTED) ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
-        String msg = "{\\"device\\":\\"TURIN-G\\",\\"version\\":\\"1.5\\",\\"ip\\":\\"" + ip + "\\"}";
-        _ota_server.send(200, "application/json", msg);
-    });
-
+    _ota_server.on("/ota", HTTP_POST,
+        []() {
+            _ota_server.send(200, "text/plain", Update.hasError() ? "FAIL" : "OK");
+            if (!Update.hasError()) { delay(200); ESP.restart(); }
+        },
+        []() {
+            HTTPUpload& u = _ota_server.upload();
+            if (u.status == UPLOAD_FILE_START)        Update.begin(UPDATE_SIZE_UNKNOWN);
+            else if (u.status == UPLOAD_FILE_WRITE)   Update.write(u.buf, u.currentSize);
+            else if (u.status == UPLOAD_FILE_END)     Update.end(true);
+        });
     _ota_server.begin();
 }
 
-void _ota_loop() {
+inline void _ota_loop() {
     _ota_server.handleClient();
 }
-// ── Fin Turin OTA Core ──────────────────────────────────────────────────────
 """
-
-OTA_SETUP_CALL = "\n    _ota_setup(); // Turin OTA\n"
-OTA_LOOP_CALL  = "\n    _ota_loop();  // Turin OTA\n"
-
-def inject_ota(cpp_code: str) -> str:
-    """Inyecta el bloque OTA en el codigo del usuario sin modificar su logica."""
-    if "_ota_setup" in cpp_code:
-        return cpp_code  # ya tiene OTA, no duplicar
-
-    # Quitar #include <Arduino.h> si ya estaba (lo ponemos en OTA_HEADER)
-    cpp_code = cpp_code.replace("#include <Arduino.h>", "")
-
-    # Insertar header OTA al principio
-    cpp_code = OTA_HEADER + "\n" + cpp_code
-
-    # Inyectar _ota_setup() al inicio de setup()
-    cpp_code = cpp_code.replace("void setup() {", "void setup() {" + OTA_SETUP_CALL)
-    cpp_code = cpp_code.replace("void setup(){",  "void setup(){" + OTA_SETUP_CALL)
-
-    # Inyectar _ota_loop() al inicio de loop()
-    cpp_code = cpp_code.replace("void loop() {", "void loop() {" + OTA_LOOP_CALL)
-    cpp_code = cpp_code.replace("void loop(){",  "void loop(){" + OTA_LOOP_CALL)
-
-    return cpp_code
 
 def get_pio():
     import shutil
@@ -171,6 +139,10 @@ def compile_code():
 
     with open(os.path.join(src, "main.cpp"), "w") as f:
         f.write(cpp_code)
+
+    # Escribir turin_ota.h en la carpeta src
+    with open(os.path.join(src, "turin_ota.h"), "w") as f:
+        f.write(TURIN_OTA_H)
 
     lib_deps = "\n    ".join(LIBS)
     with open(os.path.join(proj, "platformio.ini"), "w") as f:
