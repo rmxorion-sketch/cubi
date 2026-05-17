@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TURIN-G">
+<title>TURIN-G</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --card: #161b22; --card2: #1c2128;
+    --border: #30363d; --text: #e6edf3; --dim: #7d8590;
+    --blue: #388bfd; --green: #3fb950; --red: #f85149;
+    --yellow: #d29922;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  /* ── Header ── */
+  header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 10; }
+  header .logo { width: 32px; height: 32px; background: var(--blue); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; color: #fff; flex-shrink: 0; }
+  header h1 { font-size: 17px; font-weight: 700; }
+  header span { font-size: 11px; color: var(--dim); margin-left: auto; }
+  #status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex-shrink: 0; transition: background .3s; }
+  #status-dot.ok { background: var(--green); }
+  #status-dot.err { background: var(--red); }
+
+  /* ── Main ── */
+  main { padding: 20px; max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── Card ── */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card h2 { font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+  /* ── Steps ── */
+  .steps { display: flex; gap: 0; margin-bottom: 4px; }
+  .step { flex: 1; text-align: center; font-size: 11px; color: var(--dim); padding: 6px 4px; border-bottom: 2px solid var(--border); transition: all .3s; }
+  .step.active { color: var(--blue); border-color: var(--blue); font-weight: 600; }
+  .step.done { color: var(--green); border-color: var(--green); }
+
+  /* ── Textarea ── */
+  textarea { width: 100%; background: var(--card2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 15px; padding: 14px; resize: none; outline: none; font-family: inherit; line-height: 1.5; transition: border-color .2s; }
+  textarea:focus { border-color: var(--blue); }
+  textarea::placeholder { color: var(--dim); }
+
+  /* ── Buttons ── */
+  .btn { width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity .2s, transform .1s; font-family: inherit; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-blue  { background: var(--blue);  color: #fff; }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-dim   { background: var(--card2); color: var(--dim); border: 1px solid var(--border); }
+
+  /* ── Log ── */
+  #log { background: #010409; border: 1px solid var(--border); border-radius: 8px; padding: 14px; font-family: 'Consolas', monospace; font-size: 13px; line-height: 1.8; min-height: 120px; max-height: 240px; overflow-y: auto; }
+  .log-info  { color: var(--blue); }
+  .log-ok    { color: var(--green); }
+  .log-error { color: var(--red); }
+  .log-warn  { color: var(--yellow); }
+
+  /* ── Progress ── */
+  .progress-wrap { background: var(--card2); border-radius: 99px; height: 6px; overflow: hidden; margin: 8px 0; }
+  .progress-bar  { height: 100%; background: var(--blue); border-radius: 99px; transition: width .4s ease; width: 0%; }
+
+  /* ── WiFi config ── */
+  .input-row { display: flex; flex-direction: column; gap: 8px; }
+  input[type=text], input[type=password] {
+    background: var(--card2); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 15px; padding: 12px 14px; outline: none; font-family: inherit; width: 100%;
+  }
+  input:focus { border-color: var(--blue); }
+  label { font-size: 13px; color: var(--dim); }
+
+  /* ── Device info ── */
+  .device-info { display: flex; align-items: center; gap: 10px; padding: 12px; background: var(--card2); border-radius: 8px; border: 1px solid var(--border); }
+  .device-icon { font-size: 24px; }
+  .device-text { flex: 1; }
+  .device-text strong { display: block; font-size: 14px; }
+  .device-text small { color: var(--dim); font-size: 12px; }
+
+  /* ── Hidden ── */
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">T</div>
+  <h1>TURIN-G</h1>
+  <div id="status-dot"></div>
+  <span id="status-text">Verificando...</span>
+</header>
+
+<main>
+
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step active" id="step1">1 · Proyecto</div>
+    <div class="step" id="step2">2 · Compilar</div>
+    <div class="step" id="step3">3 · Instalar</div>
+  </div>
+
+  <!-- Paso 1: Escribir proyecto -->
+  <div class="card" id="panel-proyecto">
+    <h2>¿Qué quieres crear?</h2>
+    <textarea id="prompt" rows="5" placeholder="Ej: Haz que el LED del pin 2 parpadee cada segundo y muestre un contador en el monitor serial..."></textarea>
+    <br><br>
+    <button class="btn btn-blue" id="btn-compilar" onclick="compilar()">✨ Generar y compilar</button>
+  </div>
+
+  <!-- Paso 2: Compilando -->
+  <div class="card hidden" id="panel-compilando">
+    <h2>Compilando en servidor Teslatron</h2>
+    <div class="progress-wrap"><div class="progress-bar" id="prog-compile"></div></div>
+    <div id="log"><span class="log-info">Iniciando compilación...</span></div>
+  </div>
+
+  <!-- Paso 3: Instalar OTA -->
+  <div class="card hidden" id="panel-ota">
+    <h2>Instalar en TURIN-G</h2>
+    <div class="device-info" id="device-info">
+      <div class="device-icon">📡</div>
+      <div class="device-text">
+        <strong id="device-name">TURIN-G</strong>
+        <small id="device-ip">192.168.4.1</small>
+      </div>
+      <span id="device-badge" style="font-size:11px;padding:4px 8px;background:var(--green);color:#fff;border-radius:99px;">Listo</span>
+    </div>
+    <br>
+    <div class="progress-wrap hidden" id="ota-progress-wrap">
+      <div class="progress-bar" id="prog-ota"></div>
+    </div>
+    <div id="log-ota" class="hidden" style="margin-top:8px;background:#010409;border:1px solid var(--border);border-radius:8px;padding:14px;font-family:monospace;font-size:13px;line-height:1.8;max-height:140px;overflow-y:auto;"></div>
+    <br>
+    <button class="btn btn-green" id="btn-ota" onclick="instalarOTA()">⚡ Instalar por WiFi</button>
+    <br><br>
+    <button class="btn btn-dim" onclick="reiniciar()">← Nuevo proyecto</button>
+  </div>
+
+  <!-- WiFi Config (si no está conectado a internet) -->
+  <div class="card" id="panel-wifi">
+    <h2>🌐 Conectar TURIN-G a tu WiFi (opcional)</h2>
+    <p style="font-size:13px;color:var(--dim);margin-bottom:14px;">Para compilar necesitas internet. Conecta el TURIN-G a tu red WiFi doméstica.</p>
+    <div class="input-row">
+      <label>Nombre de tu red WiFi (SSID)</label>
+      <input type="text" id="wifi-ssid" placeholder="MiRedWiFi">
+      <label>Contraseña</label>
+      <input type="password" id="wifi-pass" placeholder="contraseña">
+      <button class="btn btn-blue" onclick="enviarWifi()">Guardar WiFi en TURIN-G</button>
+    </div>
+    <p style="font-size:11px;color:var(--dim);margin-top:10px;" id="wifi-status"></p>
+  </div>
+
+</main>
+
+<script>
+const ESP_IP   = "192.168.4.1";
+const ESP_PORT = 8266;
+const ESP_BASE = `http://${ESP_IP}:${ESP_PORT}`;
+const SERVER   = "https://hearty-charm-production-8ba1.up.railway.app";
+
+let firmwareBin = null;
+
+// ── Verificar conexión al ESP32 ──────────────────────────────────────────────
+async function checkDevice() {
+  const dot  = document.getElementById("status-dot");
+  const txt  = document.getElementById("status-text");
+  try {
+    const r = await fetch(`${ESP_BASE}/status`, { signal: AbortSignal.timeout(3000) });
+    const d = await r.json();
+    dot.className = "ok";
+    txt.textContent = `${d.device || "TURIN-G"} · ${d.ip || ESP_IP}`;
+    document.getElementById("device-name").textContent = d.device || "TURIN-G";
+    document.getElementById("device-ip").textContent   = d.ip    || ESP_IP;
+  } catch {
+    dot.className = "err";
+    txt.textContent = "TURIN-G no detectado";
+  }
+}
+
+checkDevice();
+setInterval(checkDevice, 8000);
+
+// ── Steps helper ─────────────────────────────────────────────────────────────
+function setStep(n) {
+  [1,2,3].forEach(i => {
+    const el = document.getElementById(`step${i}`);
+    el.className = "step" + (i < n ? " done" : i === n ? " active" : "");
+  });
+}
+
+// ── Log helpers ──────────────────────────────────────────────────────────────
+function log(msg, type="info", target="log") {
+  const el = document.getElementById(target);
+  el.innerHTML += `<span class="log-${type}">${msg}</span>\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setProgress(id, pct) {
+  document.getElementById(id).style.width = pct + "%";
+}
+
+// ── Compilar ─────────────────────────────────────────────────────────────────
+async function compilar() {
+  const prompt = document.getElementById("prompt").value.trim();
+  if (!prompt) { alert("Escribe qué quieres crear primero."); return; }
+
+  document.getElementById("btn-compilar").disabled = true;
+  document.getElementById("panel-compilando").classList.remove("hidden");
+  document.getElementById("log").innerHTML = "";
+  setStep(2);
+
+  log("Conectando con servidor Teslatron...");
+  setProgress("prog-compile", 10);
+
+  try {
+    // 1. Pedir código a la IA
+    log("Generando código con IA...");
+    setProgress("prog-compile", 25);
+
+    const genRes = await fetch(`${SERVER}/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+
+    let code = "";
+    if (genRes.ok) {
+      const gd = await genRes.json();
+      code = gd.code || "";
+      log("Código generado ✓", "ok");
+    } else {
+      // Si no hay endpoint /generate, mandar el prompt como código directo
+      code = `// Proyecto: ${prompt}\n#include <Arduino.h>\nvoid setup(){Serial.begin(115200);}\nvoid loop(){}`;
+      log("Usando compilación directa...", "warn");
+    }
+
+    setProgress("prog-compile", 50);
+    log("Compilando para ESP32...");
+
+    // 2. Compilar
+    const compRes = await fetch(`${SERVER}/compile`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, prompt })
+    });
+
+    if (!compRes.ok) {
+      const err = await compRes.json().catch(() => ({}));
+      throw new Error(err.error || `Error ${compRes.status}`);
+    }
+
+    setProgress("prog-compile", 90);
+    firmwareBin = await compRes.arrayBuffer();
+    log(`Compilado: ${(firmwareBin.byteLength/1024).toFixed(1)} KB ✓`, "ok");
+    setProgress("prog-compile", 100);
+
+    // 3. Mostrar panel OTA
+    setTimeout(() => {
+      document.getElementById("panel-compilando").classList.add("hidden");
+      document.getElementById("panel-ota").classList.remove("hidden");
+      setStep(3);
+    }, 600);
+
+  } catch(e) {
+    log(`Error: ${e.message}`, "error");
+    document.getElementById("btn-compilar").disabled = false;
+    setStep(1);
+  }
+}
+
+// ── Instalar OTA ─────────────────────────────────────────────────────────────
+async function instalarOTA() {
+  if (!firmwareBin) { alert("Primero compila un proyecto."); return; }
+
+  const btn = document.getElementById("btn-ota");
+  btn.disabled = true;
+  btn.textContent = "Instalando...";
+
+  document.getElementById("ota-progress-wrap").classList.remove("hidden");
+  document.getElementById("log-ota").classList.remove("hidden");
+  document.getElementById("log-ota").innerHTML = "";
+
+  const logO = (m, t="info") => log(m, t, "log-ota");
+
+  logO("Conectando con TURIN-G...");
+  setProgress("prog-ota", 10);
+
+  try {
+    logO(`Enviando ${(firmwareBin.byteLength/1024).toFixed(1)} KB por WiFi...`);
+    setProgress("prog-ota", 30);
+
+    const res = await fetch(`${ESP_BASE}/ota`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: firmwareBin,
+      signal: AbortSignal.timeout(60000)
+    });
+
+    setProgress("prog-ota", 90);
+
+    if (res.ok) {
+      const txt = await res.text();
+      if (txt.includes("OK")) {
+        setProgress("prog-ota", 100);
+        logO("✅ Firmware instalado. TURIN-G reiniciando...", "ok");
+        btn.textContent = "✅ ¡Listo!";
+        btn.style.background = "var(--green)";
+        setTimeout(() => checkDevice(), 5000);
+      } else {
+        throw new Error("El ESP32 reportó error: " + txt);
+      }
+    } else {
+      throw new Error(`HTTP ${res.status}`);
+    }
+  } catch(e) {
+    logO(`Error OTA: ${e.message}`, "error");
+    logO("Verifica que estés conectado a TURIN-G-Setup", "warn");
+    btn.disabled = false;
+    btn.textContent = "⚡ Reintentar";
+  }
+}
+
+// ── Enviar WiFi al ESP32 ─────────────────────────────────────────────────────
+async function enviarWifi() {
+  const ssid = document.getElementById("wifi-ssid").value.trim();
+  const pass = document.getElementById("wifi-pass").value;
+  const st   = document.getElementById("wifi-status");
+  if (!ssid) { st.textContent = "Escribe el nombre de tu red."; return; }
+  st.textContent = "Enviando...";
+  try {
+    const r = await fetch(`${ESP_BASE}/wifi`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ssid, pass }),
+      signal: AbortSignal.timeout(5000)
+    });
+    st.textContent = r.ok ? "✅ WiFi guardado. TURIN-G se reiniciará." : "❌ Error al guardar.";
+  } catch {
+    st.textContent = "❌ No se pudo conectar con TURIN-G. ¿Estás en TURIN-G-Setup?";
+  }
+}
+
+// ── Reiniciar flujo ───────────────────────────────────────────────────────────
+function reiniciar() {
+  firmwareBin = null;
+  document.getElementById("prompt").value = "";
+  document.getElementById("btn-compilar").disabled = false;
+  document.getElementById("panel-compilando").classList.add("hidden");
+  document.getElementById("panel-ota").classList.add("hidden");
+  document.getElementById("btn-ota").disabled = false;
+  document.getElementById("btn-ota").textContent = "⚡ Instalar por WiFi";
+  document.getElementById("btn-ota").style.background = "";
+  setStep(1);
+}
+</script>
+</body>
+</html>

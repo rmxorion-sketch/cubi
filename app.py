@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify, send_file
-import subprocess, os, tempfile, hashlib, json, io
+from flask_cors import CORS
+import subprocess, os, tempfile, hashlib, json, io, urllib.request
 
 app = Flask(__name__)
+CORS(app)  # permite que la PWA llame al servidor desde cualquier origen
 
 BOARD     = "esp32dev"
 PLATFORM  = "espressif32"
@@ -104,7 +106,49 @@ def get_pio():
 
 @app.route("/", methods=["GET"])
 def index():
+    # Servir la PWA directamente desde Railway
+    pwa = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.isfile(pwa):
+        return open(pwa).read(), 200, {"Content-Type": "text/html"}
     return jsonify({"status": "TURIN-G Compile Server", "version": "2.0"})
+
+@app.route("/generate", methods=["POST"])
+def generate_code():
+    """Llama a la IA para generar código Arduino desde un prompt."""
+    data = request.get_json()
+    if not data or "prompt" not in data:
+        return jsonify({"ok": False, "error": "No prompt"}), 400
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return jsonify({"ok": False, "error": "API key no configurada en Railway"}), 500
+
+    system = """Eres un experto en Arduino/ESP32. Genera SOLO código C++ válido para ESP32 sin explicaciones.
+El código debe tener setup() y loop(). No agregues bloques de código markdown. Solo el código."""
+
+    body = json.dumps({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 2000,
+        "system": system,
+        "messages": [{"role": "user", "content": data["prompt"]}]
+    }).encode()
+
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            resp = json.loads(r.read())
+            code = resp["content"][0]["text"].strip()
+            return jsonify({"ok": True, "code": code})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/cache/clear", methods=["POST"])
 def clear_cache():
