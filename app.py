@@ -1,9 +1,7 @@
 from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
-import subprocess, os, tempfile, hashlib, json, io, urllib.request
+import subprocess, os, tempfile, hashlib, json, io
 
 app = Flask(__name__)
-CORS(app)  # permite que la PWA llame al servidor desde cualquier origen
 
 BOARD     = "esp32dev"
 PLATFORM  = "espressif32"
@@ -12,7 +10,6 @@ CACHE_DIR = "/tmp/turin_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 LIBS_BASE = [
-    "knolleary/PubSubClient@^2.8",
     "bblanchon/ArduinoJson@^6.21.0",
     "madhephaestus/ESP32Servo@^0.13.0"
 ]
@@ -106,49 +103,7 @@ def get_pio():
 
 @app.route("/", methods=["GET"])
 def index():
-    # Servir la PWA directamente desde Railway
-    pwa = os.path.join(os.path.dirname(__file__), "index.html")
-    if os.path.isfile(pwa):
-        return open(pwa).read(), 200, {"Content-Type": "text/html"}
-    return jsonify({"status": "TURIN-G Compile Server", "version": "2.0"})
-
-@app.route("/generate", methods=["POST"])
-def generate_code():
-    """Llama a la IA para generar código Arduino desde un prompt."""
-    data = request.get_json()
-    if not data or "prompt" not in data:
-        return jsonify({"ok": False, "error": "No prompt"}), 400
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return jsonify({"ok": False, "error": "API key no configurada en Railway"}), 500
-
-    system = """Eres un experto en Arduino/ESP32. Genera SOLO código C++ válido para ESP32 sin explicaciones.
-El código debe tener setup() y loop(). No agregues bloques de código markdown. Solo el código."""
-
-    body = json.dumps({
-        "model": "claude-haiku-4-5-20251001",
-        "max_tokens": 2000,
-        "system": system,
-        "messages": [{"role": "user", "content": data["prompt"]}]
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=body,
-        headers={
-            "Content-Type": "application/json",
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01"
-        }
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            resp = json.loads(r.read())
-            code = resp["content"][0]["text"].strip()
-            return jsonify({"ok": True, "code": code})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"status": "TURIN-G Compile Server", "version": "2.1"})
 
 @app.route("/cache/clear", methods=["POST"])
 def clear_cache():
@@ -169,7 +124,8 @@ def compile_code():
         return jsonify({"ok": False, "error": "No code provided"}), 400
 
     cpp_code = data["code"]
-    cpp_code = inject_ota(cpp_code)          # <── OTA siempre presente
+    # OTA removido para reducir uso de RAM en compilación (Railway)
+    # cpp_code = inject_ota(cpp_code)
 
     # Cache
     code_hash = hashlib.md5(cpp_code.encode()).hexdigest()
@@ -196,9 +152,7 @@ def compile_code():
     with open(os.path.join(src, "main.cpp"), "w") as f:
         f.write(cpp_code)
 
-    # Escribir turin_ota.h en la carpeta src
-    with open(os.path.join(src, "turin_ota.h"), "w") as f:
-        f.write(TURIN_OTA_H)
+    # turin_ota.h removido (OTA quitado para reducir RAM en compilación)
 
     lib_deps = "\n    ".join(get_libs(cpp_code))
     with open(os.path.join(proj, "platformio.ini"), "w") as f:
