@@ -146,6 +146,10 @@ def inject_forward_declarations(cpp_code: str) -> str:
 
 
 
+def get_pio():
+    import shutil
+    return shutil.which("pio") or shutil.which("platformio")
+
 # ─── Rutas ────────────────────────────────────────────────────────────────────
 
 @app.route("/", methods=["GET"])
