@@ -103,7 +103,7 @@ def get_pio():
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "TURIN-G Compile Server", "version": "2.3"})
+    return jsonify({"status": "TURIN-G Compile Server", "version": "2.4"})
 
 @app.route("/cache/clear", methods=["POST"])
 def clear_cache():
@@ -161,7 +161,7 @@ platform = {PLATFORM}
 board    = {BOARD}
 framework = {FRAMEWORK}
 monitor_speed = 115200
-board_build.partitions = default.csv
+board_build.partitions = min_spiffs.csv
 build_flags = -DCORE_DEBUG_LEVEL=0 -w -DCONFIG_BT_ENABLED=1
 lib_deps =
     {lib_deps}
