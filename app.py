@@ -4,7 +4,7 @@ import subprocess, os, tempfile, hashlib, json, io
 app = Flask(__name__)
 
 BOARD     = "esp32dev"
-PLATFORM  = "espressif32"
+PLATFORM  = "espressif32@6.5.0"
 FRAMEWORK = "arduino"
 CACHE_DIR = "/tmp/turin_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -95,57 +95,6 @@ inline void _ota_loop() {
 }
 """
 
-def inject_forward_declarations(cpp_code: str) -> str:
-    """
-    Detecta funciones definidas en el código y agrega sus prototipos
-    antes del primer #include o al inicio, para evitar errores de
-    'not declared in this scope' por orden de definición en C++.
-    """
-    import re
-
-    # Patrón: tipo retorno + nombre + parámetros + { (definición de función)
-    # Captura: void moverMotor(int vel) {  /  bool detectar() {  / int calcular(float x) {
-    pattern = re.compile(
-        r'^[ \t]*((?:void|bool|int|float|double|long|unsigned\s+int|unsigned\s+long|String|byte|char\*?)'
-        r'\s+(\w+)\s*\([^)]*\))\s*\{',
-        re.MULTILINE
-    )
-
-    # Ignorar setup y loop
-    SKIP = {"setup", "loop"}
-
-    prototypes = []
-    seen = set()
-    for m in pattern.finditer(cpp_code):
-        signature = m.group(1).strip()
-        fname = m.group(2)
-        if fname in SKIP or fname in seen:
-            continue
-        seen.add(fname)
-        prototypes.append(f"{signature};")
-
-    if not prototypes:
-        return cpp_code
-
-    proto_block = "// --- Forward declarations (auto) ---\n"
-    proto_block += "\n".join(prototypes) + "\n\n"
-
-    # Insertar justo después del último #include del bloque inicial
-    lines = cpp_code.split("\n")
-    last_include = -1
-    for i, line in enumerate(lines):
-        if line.strip().startswith("#include"):
-            last_include = i
-
-    if last_include >= 0:
-        lines.insert(last_include + 1, "\n" + proto_block)
-        return "\n".join(lines)
-    else:
-        return proto_block + cpp_code
-
-
-
-
 def get_pio():
     import shutil
     return shutil.which("pio") or shutil.which("platformio")
@@ -154,7 +103,7 @@ def get_pio():
 
 @app.route("/", methods=["GET"])
 def index():
-    return jsonify({"status": "TURIN-G Compile Server", "version": "2.2"})
+    return jsonify({"status": "TURIN-G Compile Server", "version": "2.3"})
 
 @app.route("/cache/clear", methods=["POST"])
 def clear_cache():
@@ -177,9 +126,6 @@ def compile_code():
     cpp_code = data["code"]
     # OTA removido para reducir uso de RAM en compilación (Railway)
     # cpp_code = inject_ota(cpp_code)
-
-    # Inyectar forward declarations para evitar errores de orden en C++
-    cpp_code = inject_forward_declarations(cpp_code)
 
     # Cache
     code_hash = hashlib.md5(cpp_code.encode()).hexdigest()
@@ -215,8 +161,8 @@ platform = {PLATFORM}
 board    = {BOARD}
 framework = {FRAMEWORK}
 monitor_speed = 115200
-board_build.partitions = min_spiffs.csv
-build_flags = -DCORE_DEBUG_LEVEL=0 -w
+board_build.partitions = default.csv
+build_flags = -DCORE_DEBUG_LEVEL=0 -w -DCONFIG_BT_ENABLED=1
 lib_deps =
     {lib_deps}
 """)
